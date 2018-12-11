@@ -32,7 +32,6 @@ SilentWings::SilentWings(const char *home_str, const char *frame_str) :
     first_pkt_timestamp_ms(0),
     time_base_us(0),
     sock(true),
-    home_initialized(false),
     inited_first_pkt_timestamp(false)
 {
     // try to bind to a specific port so that if we restart ArduPilot
@@ -167,26 +166,19 @@ bool SilentWings::recv_fdm(void)
     curr_location.lng = pkt.position_longitude * 1.0e7;
     curr_location.alt = pkt.altitude_msl * 100.0f;
     ground_level = curr_location.alt * 0.01f - pkt.altitude_ground;
-    Vector3f posdelta = location_3d_diff_NED(home, curr_location);
-    position.x = posdelta.x;
-    position.y = posdelta.y;
-    position.z = posdelta.z;
+    position = location_3d_diff_NED(home, curr_location);
     update_position();
     
-    if (get_distance(curr_location, location) > 4 || abs(curr_location.alt - location.alt)*0.01f > 2.0f || !home_initialized) {
-        printf("SilentWings home reset dist=%f alt=%.1f/%.1f\n",
+    // This is to give us a heads-up about any divergence between the aircraft location
+    // as reported by the simulator (curr_location) and as estimated by ArduPilot using
+    // home location and offset from it. In theory, it should never get triggered, 
+    // because the offset (position) is calculated by ArduPlane itself from curr_loc
+    // and home, but the key assumption here is that ArduPlane's approximations when
+    // computing the offset and when computing the location using the offset are
+    // consistent with each other.
+    if (get_distance(curr_location, location) > 4 || abs(curr_location.alt - location.alt)*0.01f > 2.0f) {
+        printf("Excessive difference between estimated and true location. Dist=%f m, true alt=%.1f cm, appoximated alt:%.1f cm\n",
                get_distance(curr_location, location), curr_location.alt*0.01f, location.alt*0.01f);
-        // reset home location
-        home.lat = curr_location.lat;
-        home.lng = curr_location.lng;
-        // Resetting altitude reference point in flight can throw off a bunch
-        // of important calculations, so let the home altitude always be 0m MSL
-        home.alt = 0;
-        position.x = 0;
-        position.y = 0;
-        position.z = -curr_location.alt;
-        home_initialized = true;
-        update_position();
     }
     
     // Auto-adjust to SilentWings' frame rate

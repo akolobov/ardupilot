@@ -97,7 +97,6 @@ private:
     SocketAPM sock;
 
     Location curr_location;
-    bool home_initialized;
 };
 
 } // namespace SITL
